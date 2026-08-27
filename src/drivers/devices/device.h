@@ -53,7 +53,8 @@
 #include "lilygoT_HMI.h"
 #elif defined(SPOTPEAR)
 #include "spotpearKeychain.h"
-
+#elif defined(NERDMINER_S3_ILI9341)
+#include "esp32S3ILI9341.h"
 #else
 #error "No device defined"
 #endif

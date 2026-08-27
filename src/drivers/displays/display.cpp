@@ -64,6 +64,9 @@ DisplayDriver *currentDisplayDriver = &t_hmiDisplayDriver;
 DisplayDriver *currentDisplayDriver = &sp_kcDisplayDriver;
 #endif
 
+#ifdef NERDMINER_S3_ILI9341
+DisplayDriver *currentDisplayDriver = &esp32S3ILI9341Driver;
+#endif
 
 // Initialize the display
 void initDisplay()
