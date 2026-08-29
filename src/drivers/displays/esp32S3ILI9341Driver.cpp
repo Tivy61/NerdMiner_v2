@@ -609,9 +609,13 @@ void esp32S3ILI9341_DoLedStuff(unsigned long frame)
 CyclicScreenFunction esp32S3ILI9341CyclicScreens[] = {
   esp32S3ILI9341_MinerScreen,
   esp32S3ILI9341_ClockScreen,
-  esp32S3ILI9341_GlobalScreen,
-  esp32S3ILI9341_PricesScreen,
-  esp32S3ILI9341_BtcChartScreen
+  esp32S3ILI9341_GlobalScreen
+  // Ecrans MARCHES et BTC-3J retires du cycle : ils font un GET HTTP bloquant
+  // (fetchPrices / fetchBtcHistory) dans la boucle d'affichage, ce qui peut
+  // figer le cyclage plusieurs secondes si CoinGecko traine. A remettre une
+  // fois le fetch passe en asynchrone / non bloquant.
+  // , esp32S3ILI9341_PricesScreen
+  // , esp32S3ILI9341_BtcChartScreen
 };
 
 DisplayDriver esp32S3ILI9341Driver = {
