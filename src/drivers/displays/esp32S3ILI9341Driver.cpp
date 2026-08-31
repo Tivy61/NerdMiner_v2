@@ -607,13 +607,13 @@ void esp32S3ILI9341_DoLedStuff(unsigned long frame)
 }
 
 CyclicScreenFunction esp32S3ILI9341CyclicScreens[] = {
-  esp32S3ILI9341_MinerScreen,
-  esp32S3ILI9341_ClockScreen,
-  esp32S3ILI9341_GlobalScreen
-  // Ecrans MARCHES et BTC-3J retires du cycle : ils font un GET HTTP bloquant
-  // (fetchPrices / fetchBtcHistory) dans la boucle d'affichage, ce qui peut
-  // figer le cyclage plusieurs secondes si CoinGecko traine. A remettre une
-  // fois le fetch passe en asynchrone / non bloquant.
+  esp32S3ILI9341_MinerScreen
+  // Reboot-loop ~12 s constate : les autres ecrans declenchent des requetes
+  // HTTP (getBTCprice / getCoinData / fetchPrices / fetchBtcHistory) sur la
+  // tache d'affichage (stack 9500 o, TLS gourmand). Cycle reduit a MINAGE
+  // (100% local, aucun HTTP) le temps de passer ces fetch en asynchrone.
+  // , esp32S3ILI9341_ClockScreen
+  // , esp32S3ILI9341_GlobalScreen
   // , esp32S3ILI9341_PricesScreen
   // , esp32S3ILI9341_BtcChartScreen
 };
