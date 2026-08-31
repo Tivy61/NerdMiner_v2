@@ -246,16 +246,6 @@ static void priceRow(int y, const char *tk, uint16_t tkcol, float price, float c
 // --------------------------------------------------------------------------
 void esp32S3ILI9341_Init(void)
 {
-  // Reset materiel franc de la dalle avant l'init : sur cette carte un crash en
-  // plein rafraichissement laissait le ILI9341 dans un etat bancal (bande noire
-  // ~1 cm a droite) que ni tft.init() ni un fillScreen ne rattrapaient.
-#ifdef TFT_RST
-  pinMode(TFT_RST, OUTPUT);
-  digitalWrite(TFT_RST, HIGH); delay(10);
-  digitalWrite(TFT_RST, LOW);  delay(20);
-  digitalWrite(TFT_RST, HIGH); delay(150);
-#endif
-
   tft.init();
   tft.setRotation(1);
   tft.setSwapBytes(true);
@@ -276,13 +266,6 @@ void esp32S3ILI9341_Init(void)
   COL_DOWN   = tft.color565(235, 80, 80);
   COL_DIM    = tft.color565(70, 74, 84);
   COL_PANEL  = tft.color565(32, 33, 38);
-
-  // Force une fenetre d'adressage colonne/ligne pleine (0..319 / 0..239) et
-  // efface la dalle. Sans ca, un crash survenu en plein pushSprite (cf. l'ancien
-  // reboot-loop) pouvait laisser la CASET du ILI9341 retrecie -> bande noire
-  // d'~1 cm a droite qui persistait aux resets logiciels. tft.init() seul ne la
-  // remet pas d'aplomb sur cette dalle.
-  tft.fillScreen(TFT_BLACK);
 
   hSPI.begin(TOUCH_CLK, TOUCH_MISO, TOUCH_MOSI);
   // begin() attend la resolution native (portrait) du panneau, PAS la resolution
