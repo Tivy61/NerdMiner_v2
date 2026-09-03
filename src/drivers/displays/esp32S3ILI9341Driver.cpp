@@ -20,6 +20,9 @@
 // montre l'inverse.
 #define ILI9341_INVERT true
 
+// [ETAPE A] bascule auto entre ecrans (aucun reseau ici)
+#define SCREEN_AUTO_CYCLE_MS 10000UL
+
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite spr = TFT_eSprite(&tft);
 
@@ -93,6 +96,30 @@ void esp32S3ILI9341_MinerScreen(unsigned long mElapsed)
   spr.pushSprite(0, 0);
 }
 
+// [ETAPE A] Ecran horloge : heure locale seulement, aucune requete reseau
+// (getClockData_t = calcul local NTP-cache, ne touche pas getBTCprice ni mempool).
+void esp32S3ILI9341_ClockScreen(unsigned long mElapsed)
+{
+  clock_data_t d = getClockData_t(mElapsed);
+  char t[12];
+  snprintf(t, sizeof(t), "%02lu:%02lu:%02lu", d.currentHours, d.currentMinutes, d.currentSeconds);
+
+  spr.fillSprite(C_BG);
+  spr.setTextDatum(TL_DATUM);
+  spr.setFreeFont(FSSB9);
+  spr.setTextColor(C_ACCENT, C_BG);
+  spr.drawString("HORLOGE", 12, 8);
+  spr.drawFastHLine(12, 28, WIDTH - 24, C_LABEL);
+
+  spr.setFreeFont(FSSB24);
+  spr.setTextColor(C_VALUE, C_BG);
+  spr.setTextDatum(MC_DATUM);
+  spr.drawString(t, WIDTH / 2, HEIGHT / 2 + 8);
+  spr.setTextDatum(TL_DATUM);
+
+  spr.pushSprite(0, 0);
+}
+
 void esp32S3ILI9341_LoadingScreen(void)
 {
   spr.fillSprite(TFT_BLACK);
@@ -125,11 +152,25 @@ void esp32S3ILI9341_AnimateCurrentScreen(unsigned long frame) {}
 
 void esp32S3ILI9341_DoLedStuff(unsigned long frame)
 {
-  // Pas de LED, pas de tactile, pas de bascule d'ecran.
+  // [ETAPE A] bascule auto toutes les SCREEN_AUTO_CYCLE_MS. Si l'ecran a change
+  // entre-temps (bouton BOOT), on recale le minuteur.
+  static unsigned long lastSwitch = 0;
+  static int lastSeen = -1;
+  unsigned long now = millis();
+  int cur = currentDisplayDriver->current_cyclic_screen;
+
+  if (cur != lastSeen) { lastSeen = cur; lastSwitch = now; return; }
+  if (now - lastSwitch >= SCREEN_AUTO_CYCLE_MS) {
+    int next = (cur + 1) % currentDisplayDriver->num_cyclic_screens;
+    currentDisplayDriver->current_cyclic_screen = next;
+    lastSeen = next;
+    lastSwitch = now;
+  }
 }
 
 CyclicScreenFunction esp32S3ILI9341CyclicScreens[] = {
-  esp32S3ILI9341_MinerScreen
+  esp32S3ILI9341_MinerScreen,
+  esp32S3ILI9341_ClockScreen
 };
 
 DisplayDriver esp32S3ILI9341Driver = {
