@@ -9,6 +9,8 @@
 
 #include <TFT_eSPI.h>
 #include "media/Free_Fonts.h"
+#include "media/myFonts.h"
+#include "OpenFontRender.h"
 #include "monitor.h"
 #include "version.h"
 
@@ -25,6 +27,7 @@
 
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite spr = TFT_eSprite(&tft);
+OpenFontRender render;   // [ETAPE B] police LCD pour la grosse horloge
 
 static uint16_t C_BG, C_LABEL, C_VALUE, C_ACCENT;
 
@@ -38,6 +41,12 @@ void esp32S3ILI9341_Init(void)
 
   spr.createSprite(WIDTH, HEIGHT);
   spr.setSwapBytes(true);
+
+  // [ETAPE B] OpenFontRender pour la grosse horloge LCD
+  render.setDrawer(spr);
+  render.setLineSpaceRatio(0.9);
+  if (render.loadFont(DigitalNumbers, sizeof(DigitalNumbers)))
+    Serial.println("Initialise error");
 
   C_BG     = TFT_BLACK;
   C_LABEL  = tft.color565(150, 158, 170);
@@ -111,11 +120,10 @@ void esp32S3ILI9341_ClockScreen(unsigned long mElapsed)
   spr.drawString("HORLOGE", 12, 8);
   spr.drawFastHLine(12, 28, WIDTH - 24, C_LABEL);
 
-  spr.setFreeFont(FSSB24);
-  spr.setTextColor(C_VALUE, C_BG);
-  spr.setTextDatum(MC_DATUM);
-  spr.drawString(t, WIDTH / 2, HEIGHT / 2 + 8);
-  spr.setTextDatum(TL_DATUM);
+  // [ETAPE B] rendu via OpenFontRender (police LCD DigitalNumbers)
+  render.setFontSize(46);
+  uint32_t w = render.getTextWidth(t);
+  render.drawString(t, (WIDTH - (int)w) / 2, 90, C_VALUE, C_BG);
 
   spr.pushSprite(0, 0);
 }
