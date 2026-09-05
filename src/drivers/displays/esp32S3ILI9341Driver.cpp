@@ -128,6 +128,33 @@ void esp32S3ILI9341_ClockScreen(unsigned long mElapsed)
   spr.pushSprite(0, 0);
 }
 
+// [ETAPE C] Ecran reseau : getCoinData() interroge mempool.space en HTTPS
+// (difficulte, hashrate reseau, halving, frais). Suspect principal du bisect :
+// requete bloquante sur la tache d'affichage (pile "Monitor" 9500 o).
+void esp32S3ILI9341_GlobalScreen(unsigned long mElapsed)
+{
+  coin_data d = getCoinData(mElapsed);
+
+  spr.fillSprite(C_BG);
+  spr.setTextDatum(TL_DATUM);
+  spr.setFreeFont(FSSB9);
+  spr.setTextColor(C_ACCENT, C_BG);
+  spr.drawString("RESEAU", 12, 8);
+  spr.setFreeFont(FSS9);
+  spr.setTextColor(C_LABEL, C_BG);
+  spr.setTextDatum(TR_DATUM);
+  spr.drawString(d.currentTime, WIDTH - 12, 8);
+  spr.setTextDatum(TL_DATUM);
+  spr.drawFastHLine(12, 28, WIDTH - 24, C_LABEL);
+
+  drawLine(40,  "DIFFICULTE RESEAU",  d.netwrokDifficulty, C_VALUE);
+  drawLine(92,  "HASHRATE RESEAU",    d.globalHashRate,    C_VALUE);
+  drawLine(144, "BLOCS AV. HALVING",  d.remainingBlocks,   C_ACCENT);
+  drawLine(196, "FRAIS (30 MIN)",     d.halfHourFee,       C_VALUE);
+
+  spr.pushSprite(0, 0);
+}
+
 void esp32S3ILI9341_LoadingScreen(void)
 {
   spr.fillSprite(TFT_BLACK);
@@ -178,7 +205,8 @@ void esp32S3ILI9341_DoLedStuff(unsigned long frame)
 
 CyclicScreenFunction esp32S3ILI9341CyclicScreens[] = {
   esp32S3ILI9341_MinerScreen,
-  esp32S3ILI9341_ClockScreen
+  esp32S3ILI9341_ClockScreen,
+  esp32S3ILI9341_GlobalScreen
 };
 
 DisplayDriver esp32S3ILI9341Driver = {
