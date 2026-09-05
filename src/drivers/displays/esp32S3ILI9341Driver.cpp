@@ -25,19 +25,34 @@
 // [ETAPE A] bascule auto entre ecrans (aucun reseau ici)
 #define SCREEN_AUTO_CYCLE_MS 10000UL
 
+// Reinit auto de la dalle (voir initPanel) : la dalle s'est deja bloquee entre
+// ~5 min et plusieurs heures apres boot selon les essais. 3 min borne le temps
+// d'ecran noir max sans etre gênant (un flash noir ~150 ms, invisible en usage).
+#define PANEL_REINIT_MS (3UL * 60UL * 1000UL)
+
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite spr = TFT_eSprite(&tft);
 OpenFontRender render;   // [ETAPE B] police LCD pour la grosse horloge
 
 static uint16_t C_BG, C_LABEL, C_VALUE, C_ACCENT;
 
-void esp32S3ILI9341_Init(void)
+// Sequence d'init/reset de la dalle uniquement (pas le sprite, pas les polices).
+// Rejouee au demarrage ET periodiquement (voir DoLedStuff) car ce panneau se
+// bloque parfois dans un etat interne fige apres un moment de fonctionnement
+// (signal SPI marginal) ; seul un vrai reset+reinit ILI9341 le resynchronise -
+// on l'a constate empiriquement (un reset ESP32 relance l'ecran a chaque fois).
+static void initPanel(void)
 {
   tft.init();
   tft.setRotation(1);
   tft.setSwapBytes(true);
   tft.invertDisplay(ILI9341_INVERT);
   tft.fillScreen(TFT_BLACK);
+}
+
+void esp32S3ILI9341_Init(void)
+{
+  initPanel();
 
   spr.createSprite(WIDTH, HEIGHT);
   spr.setSwapBytes(true);
@@ -187,6 +202,17 @@ void esp32S3ILI9341_AnimateCurrentScreen(unsigned long frame) {}
 
 void esp32S3ILI9341_DoLedStuff(unsigned long frame)
 {
+  // Reinit periodique de la dalle (voir commentaire sur initPanel) : la
+  // reapplique avant qu'elle ait le temps de rester bloquee des heures.
+  // N'affecte ni le minage ni le WiFi (tache separee) : juste un flash noir
+  // de l'ecran, ~150 ms, avant que le prochain rafraichissement le repeigne.
+  static unsigned long lastPanelReinit = 0;
+  unsigned long now0 = millis();
+  if (now0 - lastPanelReinit >= PANEL_REINIT_MS) {
+    initPanel();
+    lastPanelReinit = now0;
+  }
+
   // [ETAPE A] bascule auto toutes les SCREEN_AUTO_CYCLE_MS. Si l'ecran a change
   // entre-temps (bouton BOOT), on recale le minuteur.
   static unsigned long lastSwitch = 0;
