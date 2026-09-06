@@ -8,11 +8,18 @@
 // ---------------------------------------------------------------------------
 
 #include <TFT_eSPI.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include <math.h>
 #include "media/Free_Fonts.h"
 #include "media/myFonts.h"
 #include "OpenFontRender.h"
 #include "monitor.h"
 #include "version.h"
+
+extern String getTime(void);   // "HH:MM" local NTP-cache (monitor.cpp)
+extern String getDate(void);   // "DD/MM/YYYY" local (monitor.cpp), pas de reseau
 
 #define WIDTH  320
 #define HEIGHT 240
@@ -90,6 +97,50 @@ static void drawLine(int y, const char *label, const String &value, uint16_t vco
   spr.drawString(value, 12, y + 16);
 }
 
+// Jauge WiFi 4 barres (x = bord gauche, y = haut ; bloc ~18x13).
+static void drawWifi(int x, int y)
+{
+  int bars = 0;
+  if (WiFi.status() == WL_CONNECTED) {
+    long r = WiFi.RSSI();
+    if      (r >= -55) bars = 4;
+    else if (r >= -65) bars = 3;
+    else if (r >= -73) bars = 2;
+    else               bars = 1;
+  }
+  for (int i = 0; i < 4; i++) {
+    int bh = 3 + i * 3;
+    spr.fillRect(x + i * 5, y + 12 - bh, 3, bh, (i < bars) ? C_ACCENT : C_LABEL);
+  }
+  if (bars == 0) {                       // croix rouge si hors ligne
+    spr.drawLine(x, y + 1, x + 16, y + 12, TFT_RED);
+    spr.drawLine(x, y + 12, x + 16, y + 1, TFT_RED);
+  }
+}
+
+// Bandeau commun : titre orange a gauche, heure + jauge WiFi a droite, filet.
+static void drawHeader(const char *title, const String &timeStr)
+{
+  spr.fillSprite(C_BG);
+  spr.setTextDatum(TL_DATUM);
+  spr.setFreeFont(FSSB9);
+  spr.setTextColor(C_ACCENT, C_BG);
+  spr.drawString(title, 12, 8);
+
+  int rightEdge = WIDTH - 12;
+  spr.setFreeFont(FSS9);
+  if (timeStr.length()) {
+    spr.setTextColor(C_LABEL, C_BG);
+    spr.setTextDatum(TR_DATUM);
+    spr.drawString(timeStr, rightEdge, 8);
+    rightEdge -= spr.textWidth(timeStr) + 8;
+    spr.setTextDatum(TL_DATUM);
+  }
+  drawWifi(rightEdge - 18, 8);
+
+  spr.drawFastHLine(12, 28, WIDTH - 24, C_LABEL);
+}
+
 void esp32S3ILI9341_MinerScreen(unsigned long mElapsed)
 {
   mining_data d = getMiningData(mElapsed);
@@ -97,20 +148,7 @@ void esp32S3ILI9341_MinerScreen(unsigned long mElapsed)
   Serial.printf(">>> Completed %s share(s), %s Khashes, avg. hashrate %s KH/s\n",
                 d.completedShares.c_str(), d.totalKHashes.c_str(), d.currentHashRate.c_str());
 
-  spr.fillSprite(C_BG);
-
-  spr.setTextDatum(TL_DATUM);
-  spr.setFreeFont(FSSB9);
-  spr.setTextColor(C_ACCENT, C_BG);
-  spr.drawString("NERDMINER", 12, 8);
-
-  spr.setFreeFont(FSS9);
-  spr.setTextColor(C_LABEL, C_BG);
-  spr.setTextDatum(TR_DATUM);
-  spr.drawString(d.currentTime, WIDTH - 12, 8);
-  spr.setTextDatum(TL_DATUM);
-
-  spr.drawFastHLine(12, 28, WIDTH - 24, C_LABEL);
+  drawHeader("NERDMINER", d.currentTime);
 
   drawLine(40,  "HASHRATE",        d.currentHashRate + " kH/s", C_VALUE);
   drawLine(92,  "SHARES VALIDES",  d.completedShares,           C_VALUE);
@@ -128,17 +166,19 @@ void esp32S3ILI9341_ClockScreen(unsigned long mElapsed)
   char t[12];
   snprintf(t, sizeof(t), "%02lu:%02lu:%02lu", d.currentHours, d.currentMinutes, d.currentSeconds);
 
-  spr.fillSprite(C_BG);
-  spr.setTextDatum(TL_DATUM);
-  spr.setFreeFont(FSSB9);
-  spr.setTextColor(C_ACCENT, C_BG);
-  spr.drawString("HORLOGE", 12, 8);
-  spr.drawFastHLine(12, 28, WIDTH - 24, C_LABEL);
+  drawHeader("HORLOGE", "");
 
   // [ETAPE B] rendu via OpenFontRender (police LCD DigitalNumbers)
   render.setFontSize(46);
   uint32_t w = render.getTextWidth(t);
-  render.drawString(t, (WIDTH - (int)w) / 2, 90, C_VALUE, C_BG);
+  render.drawString(t, (WIDTH - (int)w) / 2, 84, C_VALUE, C_BG);
+
+  // date DD/MM/YYYY sous l'horloge
+  spr.setFreeFont(FSSB12);
+  spr.setTextColor(C_LABEL, C_BG);
+  spr.setTextDatum(MC_DATUM);
+  spr.drawString(getDate(), WIDTH / 2, 176);
+  spr.setTextDatum(TL_DATUM);
 
   spr.pushSprite(0, 0);
 }
@@ -150,22 +190,103 @@ void esp32S3ILI9341_GlobalScreen(unsigned long mElapsed)
 {
   coin_data d = getCoinData(mElapsed);
 
-  spr.fillSprite(C_BG);
-  spr.setTextDatum(TL_DATUM);
-  spr.setFreeFont(FSSB9);
-  spr.setTextColor(C_ACCENT, C_BG);
-  spr.drawString("RESEAU", 12, 8);
-  spr.setFreeFont(FSS9);
-  spr.setTextColor(C_LABEL, C_BG);
-  spr.setTextDatum(TR_DATUM);
-  spr.drawString(d.currentTime, WIDTH - 12, 8);
-  spr.setTextDatum(TL_DATUM);
-  spr.drawFastHLine(12, 28, WIDTH - 24, C_LABEL);
+  drawHeader("RESEAU", d.currentTime);
 
   drawLine(40,  "DIFFICULTE RESEAU",  d.netwrokDifficulty, C_VALUE);
   drawLine(92,  "HASHRATE RESEAU",    d.globalHashRate,    C_VALUE);
   drawLine(144, "BLOCS AV. HALVING",  d.remainingBlocks,   C_ACCENT);
   drawLine(196, "FRAIS (30 MIN)",     d.halfHourFee,       C_VALUE);
+
+  spr.pushSprite(0, 0);
+}
+
+// [ETAPE D] Ecran marches : BTC / ETH / HYPE en dollars via CoinGecko (HTTPS).
+struct prices_data {
+  float btc = 0, eth = 0, hype = 0;
+  float btc_chg = 0, eth_chg = 0, hype_chg = 0;
+  bool valid = false;
+};
+static prices_data lastPrices;
+static unsigned long lastPricesFetch = 0;
+#define PRICES_UPDATE_MS (90UL * 1000UL)
+
+static void fetchPrices(void)
+{
+  if (WiFi.status() != WL_CONNECTED) return;
+  unsigned long now = millis();
+  if (lastPrices.valid && (now - lastPricesFetch < PRICES_UPDATE_MS)) return;
+
+  HTTPClient http;
+  http.setTimeout(6000);
+  http.begin("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,hyperliquid&vs_currencies=usd&include_24hr_change=true");
+  http.addHeader("User-Agent", "NerdMiner-ESP32");
+  http.addHeader("Accept", "application/json");
+  int code = http.GET();
+  if (code == 200) {
+    String payload = http.getString();
+    DynamicJsonDocument doc(512);
+    if (!deserializeJson(doc, payload)) {
+      lastPrices.btc     = doc["bitcoin"]["usd"]              | lastPrices.btc;
+      lastPrices.btc_chg = doc["bitcoin"]["usd_24h_change"]   | lastPrices.btc_chg;
+      lastPrices.eth     = doc["ethereum"]["usd"]             | lastPrices.eth;
+      lastPrices.eth_chg = doc["ethereum"]["usd_24h_change"]  | lastPrices.eth_chg;
+      lastPrices.hype    = doc["hyperliquid"]["usd"]          | lastPrices.hype;
+      lastPrices.hype_chg= doc["hyperliquid"]["usd_24h_change"]| lastPrices.hype_chg;
+      lastPrices.valid = true;
+      lastPricesFetch = now;
+    }
+  }
+  http.end();
+}
+
+static void priceRow(int y, const char *tk, uint16_t tkcol, float price, float chg, bool cents)
+{
+  spr.setTextDatum(TL_DATUM);
+  spr.setFreeFont(FSSB12);
+  spr.setTextColor(tkcol, C_BG);
+  spr.drawString(tk, 12, y + 4);
+  int valx = 12 + spr.textWidth(tk) + 16;
+
+  char b[24];
+  if (cents) snprintf(b, sizeof(b), "$%.2f", price);
+  else       snprintf(b, sizeof(b), "$%.0f", price);
+  spr.setFreeFont(FSSB18);
+  spr.setTextColor(C_VALUE, C_BG);
+  spr.drawString(b, valx, y);
+
+  uint16_t c = chg >= 0 ? tft.color565(45, 210, 120) : tft.color565(235, 80, 80);
+  snprintf(b, sizeof(b), "%.1f%%", fabsf(chg));
+  spr.setFreeFont(FSS9);
+  spr.setTextColor(c, C_BG);
+  spr.setTextDatum(TR_DATUM);
+  spr.drawString(b, WIDTH - 12, y + 6);
+  int tw = spr.textWidth(b);
+  int tx = WIDTH - 12 - tw - 11;
+  if (chg >= 0) spr.fillTriangle(tx, y + 17, tx + 9, y + 17, tx + 4, y + 6,  c);
+  else          spr.fillTriangle(tx, y + 7,  tx + 9, y + 7,  tx + 4, y + 18, c);
+  spr.setTextDatum(TL_DATUM);
+}
+
+void esp32S3ILI9341_PricesScreen(unsigned long mElapsed)
+{
+  fetchPrices();
+  drawHeader("MARCHES", getTime());
+
+  if (!lastPrices.valid) {
+    spr.setFreeFont(FSS12);
+    spr.setTextColor(C_LABEL, C_BG);
+    spr.setTextDatum(MC_DATUM);
+    spr.drawString("Chargement des cours...", WIDTH / 2, HEIGHT / 2);
+    spr.setTextDatum(TL_DATUM);
+    spr.pushSprite(0, 0);
+    return;
+  }
+
+  priceRow(44,  "BTC",  C_ACCENT, lastPrices.btc,  lastPrices.btc_chg,  false);
+  spr.drawFastHLine(12, 88, WIDTH - 24, C_LABEL);
+  priceRow(102, "ETH",  C_VALUE,  lastPrices.eth,  lastPrices.eth_chg,  true);
+  spr.drawFastHLine(12, 146, WIDTH - 24, C_LABEL);
+  priceRow(160, "HYPE", C_VALUE,  lastPrices.hype, lastPrices.hype_chg, true);
 
   spr.pushSprite(0, 0);
 }
@@ -232,7 +353,8 @@ void esp32S3ILI9341_DoLedStuff(unsigned long frame)
 CyclicScreenFunction esp32S3ILI9341CyclicScreens[] = {
   esp32S3ILI9341_MinerScreen,
   esp32S3ILI9341_ClockScreen,
-  esp32S3ILI9341_GlobalScreen
+  esp32S3ILI9341_GlobalScreen,
+  esp32S3ILI9341_PricesScreen
 };
 
 DisplayDriver esp32S3ILI9341Driver = {
